@@ -1,0 +1,54 @@
+{
+    "Name": "PWSoundDeck",
+    "Author": "biviale",
+    "Version": "1.0.0",
+    "PluginUUID": "com.biviale.pwsounddeck",
+    "Icon": "icons/icon",
+    "Category": "PWSoundDeck",
+    "Actions": [
+        {
+            "Name": "Play Audio",
+            "UUID": "com.biviale.pwsounddeck.playaudio",
+            "Tooltip": "Play an audio file to a specific output device.",
+            "Icon": "icons/icon_play",
+            "VisibleInActionsList": true,
+            "SupportedInMultiActions": true,
+            "PropertyInspectorPath": "pi/audio.html",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "actionDefaultImage",
+                    "TitleAlignment": "middle",
+                    "FontSize": "16"
+                }
+            ]
+        },
+        {
+            "Name": "Stop Audio",
+            "UUID": "com.biviale.pwsounddeck.stopaudio",
+            "Tooltip": "Stop all currently playing audio.",
+            "Icon": "icons/icon_stop",
+            "VisibleInActionsList": true,
+            "SupportedInMultiActions": true,
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "actionDefaultImage",
+                    "TitleAlignment": "middle",
+                    "FontSize": "16"
+                }
+            ]
+        }
+    ],
+    "OS": [
+        {
+            "Platform": "linux",
+            "Version": "1.0.0"
+        }
+    ],
+    "CodePathLin": "pwsounddeck"
+}

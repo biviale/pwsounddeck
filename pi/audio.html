@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Audio Soundboard Property Inspector</title>
+    <!-- Basic styling inspired by common property inspectors -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #d8d8d8;
+            background-color: #2d2d2d;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .sdpi-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            width: 100%;
+        }
+
+        .sdpi-item-label {
+            width: 90px;
+            min-width: 90px;
+            text-align: right;
+            padding-right: 15px;
+            line-height: normal;
+        }
+
+        .sdpi-item-value {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .sdpi-item-value input[type="text"] {
+            width: 100%;
+            background-color: #3d3d3d;
+            border: 1px solid #555;
+            color: white;
+            padding: 4px;
+            border-radius: 3px;
+            flex-grow: 1;
+            margin-right: 5px;
+        }
+
+        .sdpi-item-value select {
+            width: 100%;
+            background-color: #3d3d3d;
+            border: 1px solid #555;
+            color: white;
+            padding: 4px 24px 4px 8px;
+            border-radius: 3px;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 2px center;
+        }
+
+        .sdpi-item-value select option {
+            background-color: #3d3d3d;
+            color: white;
+        }
+
+        .sdpi-item-value button {
+            background-color: #555;
+            border: 1px solid #777;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .sdpi-item-value button:active {
+            background-color: #444;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sdpi-wrapper">
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Audio File</div>
+            <div class="sdpi-item-value">
+                <input type="text" id="audioPath" placeholder="/path/to/audio/file.mp3" />
+                <button id="browseBtn">Browse</button>
+            </div>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Volume</div>
+            <div class="sdpi-item-value" style="display: flex; align-items: center;">
+                <input type="range" id="volume" min="0" max="100" value="100">
+                <span id="volumeValue">100%</span>
+            </div>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Output Device</div>
+            <div class="sdpi-item-value">
+                <select id="audioDevice">
+                    <option value="">Default OS Device</option>
+                </select>
+            </div>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Playback Mode</div>
+            <div class="sdpi-item-value">
+                <select id="playbackMode">
+                    <option value="restart">Restart</option>
+                    <option value="stack">Stack</option>
+                    <option value="hold">Hold to Play</option>
+                </select>
+            </div>
+        </div>
+        <div class="sdpi-item" style="justify-content: center; margin-top: 20px;">
+            <button id="refreshBtn">Refresh Devices</button>
+        </div>
+    </div>
+    <script src="audio.js"></script>
+</body>
+
+</html>

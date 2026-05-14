@@ -45,7 +45,18 @@ fn get_pulseaudio_sinks() -> Vec<PaSinkInfo> {
                     .iter()
                     .filter_map(|sink| {
                         let name = sink.get("name")?.as_str()?.to_string();
-                        let description = sink.get("description")?.as_str()?.to_string();
+                        let description = sink
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .filter(|d| !d.is_empty() && *d != "(null)")
+                            .or_else(|| {
+                                sink.get("properties")
+                                    .and_then(|p| p.get("device.description"))
+                                    .and_then(|d| d.as_str())
+                                    .filter(|d| !d.is_empty() && *d != "(null)")
+                            })
+                            .unwrap_or(name.as_str())
+                            .to_string();
                         Some(PaSinkInfo { name, description })
                     })
                     .collect(),
@@ -145,7 +156,7 @@ impl Action for PlayAudioAction {
 
         tokio::task::spawn_blocking(move || {
             // Acquire the lock so we can safely set env vars
-            let lock = STREAM_CREATION_LOCK.lock().unwrap();
+            let lock = STREAM_CREATION_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
             // Set variables to route audio to the correct device
             if !target_device_name.is_empty() {

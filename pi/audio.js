@@ -1,7 +1,7 @@
 let websocket = null;
 let pluginAction = null;
-let pluginContext = null;
 let pluginUUID = null;
+let instanceContext = null;
 let globalActionInfo = null;
 
 // The standard OpenAction/StreamDeck plugin registration hook for Property Inspectors
@@ -9,8 +9,7 @@ function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegist
     pluginUUID = inPropertyInspectorUUID;
     globalActionInfo = JSON.parse(inActionInfo);
     pluginAction = globalActionInfo.action;
-    pluginContext = inPropertyInspectorUUID; // Context for PI is its UUID usually, but wait, let's use the one from actionInfo
-    let actualContext = globalActionInfo.context;
+    instanceContext = globalActionInfo.context;
 
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
@@ -54,7 +53,7 @@ function sendToPlugin(payload) {
         websocket.send(JSON.stringify({
             "event": "sendToPlugin",
             "action": pluginAction,
-            "context": pluginUUID, // Actually, we should send the instance context if possible, but pluginUUID works for PI
+            "context": instanceContext,
             "payload": payload
         }));
     }
@@ -70,7 +69,7 @@ function saveSettings() {
         };
         websocket.send(JSON.stringify({
             "event": "setSettings",
-            "context": pluginUUID, // Use PI UUID for setSettings context if not using the actual token
+            "context": instanceContext,
             "payload": payload
         }));
     }

@@ -4,20 +4,19 @@ use openaction::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs::File;
-use std::io::BufReader;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 
-// Global collection of active audio sinks.
-// We store the Sink here (which is Send+Sync), along with the OpenAction `instance_id`.
-// The OutputStream is kept alive in the spawned blocking thread.
-static ACTIVE_SINKS: LazyLock<DashMap<u64, (String, rodio::Sink)>> = LazyLock::new(DashMap::new);
+// Global collection of active audio players.
+// We store the Player here (which is Send+Sync), along with the OpenAction `instance_id`.
+// The MixerDeviceSink (stream) is kept alive in the spawned blocking thread.
+static ACTIVE_PLAYERS: LazyLock<DashMap<u64, (String, rodio::Player)>> = LazyLock::new(DashMap::new);
 
 // Global counter for stream IDs.
 static STREAM_COUNTER: LazyLock<std::sync::atomic::AtomicU64> =
     LazyLock::new(|| std::sync::atomic::AtomicU64::new(0));
 
-// Lock to safely set PULSE_SINK before creating the OutputStream.
+// Lock to safely set PULSE_SINK before creating the MixerDeviceSink.
 static STREAM_CREATION_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 /// Represents a PulseAudio/PipeWire sink with its internal name and human-readable description.
@@ -121,21 +120,21 @@ impl Action for PlayAudioAction {
         info!("key_down triggered for instance {}, mode: {}", instance_id_str, playback_mode);
 
         if playback_mode == "restart" || playback_mode == "hold" {
-            // Stop any existing sinks playing for this button instance
+            // Stop any existing players playing for this button instance
             let mut keys_to_remove = Vec::new();
-            for entry in ACTIVE_SINKS.iter() {
+            for entry in ACTIVE_PLAYERS.iter() {
                 if entry.value().0 == instance_id_str {
                     keys_to_remove.push(*entry.key());
                 }
             }
             for key in keys_to_remove {
-                if let Some((_, (_, sink))) = ACTIVE_SINKS.remove(&key) {
-                    sink.stop();
+                if let Some((_, (_, player))) = ACTIVE_PLAYERS.remove(&key) {
+                    player.stop();
                 }
             }
         } else if playback_mode == "stack" {
             // Keep at most 10 stacked sounds. If greater, stop the oldest.
-            let mut active_keys: Vec<u64> = ACTIVE_SINKS
+            let mut active_keys: Vec<u64> = ACTIVE_PLAYERS
                 .iter()
                 .filter(|e| e.value().0 == instance_id_str)
                 .map(|e| *e.key())
@@ -146,9 +145,9 @@ impl Action for PlayAudioAction {
                 active_keys.sort();
                 // We want to make room for 1 more, so remove enough to bring it to 9.
                 let overage = active_keys.len() - 9;
-                for i in 0..overage {
-                    if let Some((_, (_, sink))) = ACTIVE_SINKS.remove(&active_keys[i]) {
-                        sink.stop();
+                for key in active_keys.iter().take(overage) {
+                    if let Some((_, (_, player))) = ACTIVE_PLAYERS.remove(key) {
+                        player.stop();
                     }
                 }
             }
@@ -173,8 +172,8 @@ impl Action for PlayAudioAction {
                 };
             }
 
-            // Create the output stream (this binds to the current device specified by env variables)
-            let stream_result = rodio::OutputStream::try_default();
+            // Create the output device sink (binds to the current device specified by env variables)
+            let stream_result = rodio::DeviceSinkBuilder::open_default_sink();
 
             // Reset env vars immediately after binding, then release the lock
             unsafe {
@@ -184,36 +183,34 @@ impl Action for PlayAudioAction {
             drop(lock);
 
             match stream_result {
-                Ok((_stream, stream_handle)) => {
+                Ok(mut stream) => {
+                    stream.log_on_drop(false);
                     match File::open(&audio_path) {
                         Ok(file) => {
-                            let file = BufReader::new(file);
-                            match rodio::Decoder::new(file) {
-                                Ok(source) => match rodio::Sink::try_new(&stream_handle) {
-                                    Ok(sink) => {
-                                        sink.set_volume(volume_factor);
-                                        sink.append(source);
-                                        let id = STREAM_COUNTER
-                                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        ACTIVE_SINKS.insert(id, (instance_id_str, sink));
+                            match rodio::Decoder::try_from(file) {
+                                Ok(source) => {
+                                    let player = rodio::Player::connect_new(stream.mixer());
+                                    player.set_volume(volume_factor);
+                                    player.append(source);
+                                    let id = STREAM_COUNTER
+                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    ACTIVE_PLAYERS.insert(id, (instance_id_str, player));
 
-                                        // Poll until the sink is empty or has been stopped/removed
-                                        loop {
-                                            match ACTIVE_SINKS.get(&id) {
-                                                Some(entry) => {
-                                                    if entry.value().1.empty() {
-                                                        break;
-                                                    }
+                                    // Poll until the player is empty or has been stopped/removed
+                                    loop {
+                                        match ACTIVE_PLAYERS.get(&id) {
+                                            Some(entry) => {
+                                                if entry.value().1.empty() {
+                                                    break;
                                                 }
-                                                None => break, // Removed by StopAudioAction or Restart mode
                                             }
-                                            std::thread::sleep(std::time::Duration::from_millis(100));
+                                            None => break, // Removed by StopAudioAction or Restart mode
                                         }
-                                        // Clean up after playback completes
-                                        ACTIVE_SINKS.remove(&id);
-                                        // _stream (OutputStream) is dropped here, closing the PA connection
+                                        std::thread::sleep(std::time::Duration::from_millis(100));
                                     }
-                                    Err(e) => error!("Failed to create sink: {}", e),
+                                    // Clean up after playback completes
+                                    ACTIVE_PLAYERS.remove(&id);
+                                    // stream (MixerDeviceSink) is dropped here, closing the PA connection
                                 },
                                 Err(e) => error!("Failed to decode audio file: {}", e),
                             }
@@ -241,14 +238,14 @@ impl Action for PlayAudioAction {
         if playback_mode == "hold" {
             // "Hold to Play" mode: stop all audio from this instance when the key is released.
             let mut keys_to_remove = Vec::new();
-            for entry in ACTIVE_SINKS.iter() {
+            for entry in ACTIVE_PLAYERS.iter() {
                 if entry.value().0 == instance_id_str {
                     keys_to_remove.push(*entry.key());
                 }
             }
             for key in keys_to_remove {
-                if let Some((_, (_, sink))) = ACTIVE_SINKS.remove(&key) {
-                    sink.stop();
+                if let Some((_, (_, player))) = ACTIVE_PLAYERS.remove(&key) {
+                    player.stop();
                 }
             }
         }
@@ -268,7 +265,7 @@ impl Action for PlayAudioAction {
                     let instance_id = instance.instance_id.clone();
                     tokio::spawn(async move {
                         // Pactl blocks briefly, so offload to spawn_blocking.
-                        let sinks = tokio::task::spawn_blocking(|| get_pulseaudio_sinks())
+                        let sinks = tokio::task::spawn_blocking(get_pulseaudio_sinks)
                             .await
                             .unwrap_or_default();
                             
@@ -342,12 +339,12 @@ impl Action for StopAudioAction {
         _settings: &Self::Settings,
     ) -> OpenActionResult<()> {
         info!("Stopping all audio playback...");
-        // Explicitly stop each sink before removing it.
+        // Explicitly stop each player before removing it.
         // This avoids deadlocking with the playback threads.
-        let keys: Vec<u64> = ACTIVE_SINKS.iter().map(|entry| *entry.key()).collect();
+        let keys: Vec<u64> = ACTIVE_PLAYERS.iter().map(|entry| *entry.key()).collect();
         for key in keys {
-            if let Some((_, (_, sink))) = ACTIVE_SINKS.remove(&key) {
-                sink.stop();
+            if let Some((_, (_, player))) = ACTIVE_PLAYERS.remove(&key) {
+                player.stop();
             }
         }
         Ok(())
@@ -358,14 +355,16 @@ impl Action for StopAudioAction {
 async fn main() -> OpenActionResult<()> {
     {
         use simplelog::*;
-        if let Err(error) = TermLogger::init(
-            LevelFilter::Debug,
+        // OpenDeck captures plugin stderr to <log_dir>/plugins/<uuid>.log.
+        // WriteLogger to stderr ensures all log!() macros are visible there.
+        // TermLogger would silently fail because stdout/stderr are not TTYs
+        // when the plugin is spawned as a child process.
+        WriteLogger::init(
+            LevelFilter::Info,
             Config::default(),
-            TerminalMode::Stdout,
-            ColorChoice::Never,
-        ) {
-            eprintln!("Logger initialization failed: {}", error);
-        }
+            std::io::stderr(),
+        )
+        .expect("Failed to initialize logger");
     }
 
     info!("Starting audio plugin...");

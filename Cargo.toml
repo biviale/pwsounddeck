@@ -1,17 +1,16 @@
 [package]
 name = "pwsounddeck"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["biviale"]
 
 [dependencies]
 openaction = "2.6"
-tokio = { version = "1.48", features = ["full"] }
-rodio = "0.19"
-cpal = "0.15"
+tokio = { version = "1.52", features = ["full"] }
+rodio = "0.22"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rfd = "0.13"
-dashmap = "6.1"
+rfd = "0.17"
+dashmap = "6.2"
 log = "0.4"
 simplelog = "0.12"

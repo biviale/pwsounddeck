@@ -2,6 +2,8 @@
 
 A native Rust plugin for [OpenDeck](https://github.com/v-b-boy/OpenDeck). It brings advanced and robust audio playback capabilities straight to a Stream Deck setup. Built with [rodio](https://github.com/RustAudio/rodio), [openaction-rs](https://github.com/v-b-boy/openaction-rs) and Gemini 3.1.
 
+![Icon](icons/icon.png)
+
 ## Features
 
 - **Play Audio Files**: Route `.mp3`, `.wav`, `.ogg`, or `.flac` files directly from your computer to any output device.

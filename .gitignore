@@ -1,4 +1,4 @@
-target/
-pwsounddeck
+/target/
+/com.biviale.pwsounddeck.sdPlugin/pwsounddeck
 .idea/
 .vscode/

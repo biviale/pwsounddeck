@@ -33,9 +33,16 @@ struct PaSinkInfo {
 
 /// Queries `pactl` for available audio output sinks.
 fn get_pulseaudio_sinks() -> Vec<PaSinkInfo> {
-    let output = Command::new("pactl")
-        .args(["-f", "json", "list", "sinks"])
-        .output();
+    // Spawning a child copies the whole environment, so this has to wait for
+    // any in-flight PULSE_SINK juggling in `key_down` (see the SAFETY note
+    // there). `pactl` takes ~5 ms, so a key press waits at most that long, and
+    // only while the Property Inspector is refreshing its device list.
+    let output = {
+        let _env_guard = STREAM_CREATION_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        Command::new("pactl")
+            .args(["-f", "json", "list", "sinks"])
+            .output()
+    };
 
     match output {
         Ok(output) => {
@@ -268,8 +275,13 @@ impl Action for PlayAudioAction {
 
             // Set variables to route audio to the correct device
             if !target_device_name.is_empty() {
-                // SAFETY: We hold the STREAM_CREATION_LOCK, so no other thread
-                // is concurrently reading/writing env vars for stream creation.
+                // SAFETY: STREAM_CREATION_LOCK is held here and by
+                // `get_pulseaudio_sinks`, the other place that reads the
+                // environment often enough to race. The `rfd` file dialog in
+                // `send_to_plugin` still reads it unlocked: it blocks until the
+                // user picks a file, so taking this lock there would freeze
+                // every key press for as long as the dialog is open. See
+                // issue #2.
                 unsafe {
                     std::env::set_var("PULSE_SINK", &target_device_name);
                     std::env::set_var("PIPEWIRE_NODE", &target_device_name);

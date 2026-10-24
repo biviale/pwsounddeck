@@ -953,11 +953,12 @@ dependencies = [
 
 [[package]]
 name = "pwsounddeck"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "dashmap",
  "log",
  "openaction",
+ "rand 0.10.1",
  "rfd",
  "rodio",
  "serde",

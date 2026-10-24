@@ -85,7 +85,7 @@
 <body>
     <div class="sdpi-wrapper">
         <div class="sdpi-item">
-            <div class="sdpi-item-label">Audio File</div>
+            <div class="sdpi-item-label" id="pathLabel">Audio File</div>
             <div class="sdpi-item-value">
                 <input type="text" id="audioPath" placeholder="/path/to/audio/file.mp3" />
                 <button id="browseBtn">Browse</button>
@@ -106,7 +106,7 @@
                 </select>
             </div>
         </div>
-        <div class="sdpi-item">
+        <div class="sdpi-item" id="playbackModeRow">
             <div class="sdpi-item-label">Playback Mode</div>
             <div class="sdpi-item-value">
                 <select id="playbackMode">

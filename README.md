@@ -7,9 +7,10 @@ OpenAction server can load it. It is developed and tested against
 [OpenDeck](https://github.com/nekename/OpenDeck), the reference server, which is
 what the instructions below assume.
 
-Per-key volume, four playback modes, and routing straight to a chosen
-PipeWire/PulseAudio sink — so a sound effect can go to your headset, or to the
-virtual sink your friends hear, without touching the system default.
+Per-key volume, four playback modes, a key that draws a random sound from a
+folder, and routing straight to a chosen PipeWire/PulseAudio sink — so a sound
+effect can go to your headset, or to the virtual sink your friends hear, without
+touching the system default.
 
 <p align="center">
   <img src="com.biviale.pwsounddeck.sdPlugin/icons/icon.png" alt="PWSoundDeck icon" width="128">
@@ -68,6 +69,20 @@ since device routing goes through PipeWire/PulseAudio.
   Devices* re-reads the list after plugging something in
 - **Playback Mode**, below
 
+**Play Random Audio** plays a sound drawn at random from a folder. **Browse**
+picks the folder: every `.mp3`, `.wav`, `.ogg` and `.flac` file directly inside
+it is in the draw, while subfolders and hidden files are not. The draw is a
+shuffle — each sound plays once before any of them comes back, and never twice
+in a row unless it is the only one. Pressing again while a sound plays cuts it and draws the next one;
+releasing the key does nothing, and there is no playback mode to choose.
+**Volume** and **Output Device** work as for Play Audio.
+
+To change the sounds, add or remove files in the folder; OpenDeck does not need
+to know. Changing the folder's contents starts a new shuffle, and so does
+restarting OpenDeck. Nothing is loaded ahead of time: each press reads the
+folder once, and the shuffle remembers one bit per sound, so a folder of
+thousands of files stays light.
+
 **Stop Audio** stops everything this plugin is playing, on every key at once. It
 takes no configuration.
 
@@ -85,6 +100,9 @@ Past that, the oldest is dropped to make room.
 
 A loop runs until you press its key again or hit a **Stop Audio** key.
 
+These modes belong to Play Audio. Play Random Audio has none and always behaves
+like Restart.
+
 ## Known limitations
 
 - **A looping file is held in memory** for as long as it loops, decoded — on the
@@ -95,8 +113,12 @@ A loop runs until you press its key again or hit a **Stop Audio** key.
   several keys pressed together queue up behind each other.
 - **Stop Audio is all-or-nothing.** It cannot stop one key while leaving the
   others running.
-- **Errors are silent on the deck.** A missing or undecodable file logs and
-  does nothing visible; check the log if a key seems dead.
+- **Errors are silent on the deck.** A missing or undecodable file, or a random
+  key whose folder is empty or gone, logs and does nothing visible; check the
+  log if a key seems dead.
+- **The shuffle needs a folder that lists in a stable order.** Local disks do.
+  On some network mounts the order changes from one listing to the next, and a
+  random key then only guarantees that a sound never plays twice in a row.
 
 ## Troubleshooting
 
@@ -117,14 +139,15 @@ The plugin's log is at:
 ## Development
 
 ```bash
-cargo test           # unit tests for the playback-mode and registry logic
+cargo test           # unit tests for the playback modes, the registry and the shuffle
 cargo build --release
 ./scripts/install.sh --restart
 ```
 
-The playback-mode decisions (`decide_key_down`, `decide_key_up`) and the player
-registry are kept free of audio I/O so they can be tested without a sound
-device. The parts that actually open a sink are not covered by tests.
+The playback-mode decisions (`decide_key_down`, `decide_key_up`), the player
+registry and the random draw (`draw_from_cycle`) are kept free of audio I/O so
+they can be tested without a sound device. The parts that actually open a sink
+are not covered by tests.
 
 Built with [rodio](https://github.com/RustAudio/rodio) and
 [openaction-rs](https://github.com/OpenActionAPI/rust), with AI assistance.

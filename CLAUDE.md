@@ -47,20 +47,24 @@ All the Rust lives in one file, `src/main.rs`.
 
 ### The player registry — read this before touching playback
 
-`ACTIVE_PLAYERS` is the only shared state: a `DashMap<u64, (String,
-Option<rodio::Player>)>` keyed by slot id, holding the OpenAction `instance_id`
-of the button that owns it. One button can own several slots (Stack mode).
+`ACTIVE_PLAYERS` is the shared state playback revolves around: a
+`DashMap<u64, (String, Option<rodio::Player>)>` keyed by slot id, holding the
+OpenAction `instance_id` of the button that owns it. One button can own several
+slots (Stack mode). The only other shared state is `SHUFFLE_CYCLES`, covered
+under *Play Random Audio* below.
 
 **The `Option` is not an afterthought.** Opening a sink and decoding a file take
 long enough that a second key press used to arrive before the first had
 registered anything, so a Loop key pressed twice quickly started a second,
-unstoppable loop. `key_down` therefore calls `reserve_player_slot` **before**
-spawning the audio thread, inserting `None`; the thread later hands over its
-player through `attach_player`. Consequences for any change here:
+unstoppable loop. `start_playback`, which both play actions' `key_down` call,
+therefore calls `reserve_player_slot` **before** spawning the audio thread,
+inserting `None`; the thread later hands over its player through
+`attach_player`. Consequences for any change here:
 
 - **Every exit path in the audio thread must remove its slot.** A failed sink,
-  a missing file or a decode error that returns without releasing leaves the
-  button marked busy forever, and in Loop mode that means permanently dead.
+  a missing file, a decode error or a random folder with nothing in it that
+  returns without releasing leaves the button marked busy forever, and in Loop
+  mode that means permanently dead.
 - `attach_player` returning `false` means the slot was cancelled while the audio
   was starting. It stops the player itself; the thread must just give up.
 - Anything reading the map must handle `None`, which means "starting up", not
@@ -76,19 +80,50 @@ for Loop mode that poll only ever ends by the slot being removed.
 `decide_key_down` and `decide_key_up` hold all the mode logic and touch no
 audio, which is what makes the modes testable without a sound card. **Add a new
 mode there and in `pi/audio.html`'s `<select>`, not with a new branch inside
-`key_down`.** The mode is a bare string shared between the Property Inspector
+`start_playback`.** The mode is a bare string shared between the Property Inspector
 and `AudioSettings.playback_mode`; an unknown string falls back to `restart`.
 
 Ordering inside `decide_key_down` is load-bearing: the Loop toggle is checked
 *before* the audio path, so that clearing the path in the Property Inspector
 cannot strand a running loop with no way to stop it.
 
-Tests share the one global `ACTIVE_PLAYERS` and run in parallel, so **each test
-must use its own `instance_id`** and clean up after itself.
+Tests share the global `ACTIVE_PLAYERS` and `SHUFFLE_CYCLES` and run in
+parallel, so **each test must use its own `instance_id`** and clean up after
+itself. Tests that need files use `TestDir`, which deletes its directory even
+when the test fails.
+
+### Play Random Audio
+
+`PlayRandomAudioAction` shares `start_playback` with Play Audio; the two differ
+only in their `AudioSource`. It has **no playback mode**: every press goes
+through `decide_key_down(RANDOM_PLAYBACK_MODE)`, which is Restart, and it has no
+`key_up`. Random is not a mode — do not add it to the `<select>`.
+
+The file is drawn in the audio thread, by `resolve_audio_path`, before
+`STREAM_CREATION_LOCK` is taken, because listing a folder is blocking I/O. Its
+two exits keep the registry rule above: a press that was already cancelled
+returns before drawing (so it does not use up a sound of the shuffle), and a
+folder with nothing to play removes the slot.
+
+Memory is the point of the design, because a folder can hold 10 000+ files:
+
+- `audio_file_names` reads the directory lazily and `draw_from_cycle` samples
+  it in a single pass (reservoir sampling). **Never collect the listing into a
+  `Vec`, and never store file names per key.**
+- `SHUFFLE_CYCLES` holds one `ShuffleCycle` per key: one bit per file, indexed
+  by its position in the listing, plus a fingerprint of the listing and the
+  last name played. The bits only mean something for the listing they were set
+  against, so a changed fingerprint starts a new cycle. This relies on
+  `read_dir` listing an unchanged directory in the same order, which local
+  filesystems do.
+- The pass runs under the key's `SHUFFLE_CYCLES` entry lock; only another random
+  key's draw can wait on it.
+- Entries are never removed, not even in `will_disappear`: it also fires on page
+  changes, which would reset the shuffle.
 
 ### Device routing goes through environment variables
 
-There is no rodio API for "open this named sink", so `key_down` sets
+There is no rodio API for "open this named sink", so the audio thread sets
 `PULSE_SINK` and `PIPEWIRE_NODE`, opens the sink, and immediately unsets them —
 all while holding `STREAM_CREATION_LOCK`, because the environment is
 process-global and `std::env::set_var` is `unsafe` in edition 2024.
@@ -96,9 +131,10 @@ process-global and `std::env::set_var` is `unsafe` in edition 2024.
 This is documented in issue #2, closed without a fix. **It is a soundness
 problem, not a latency one** — that was measured and the latency framing was
 dropped. `get_pulseaudio_sinks` now takes the lock around its `pactl` spawn, so
-the common half of the race is closed. **The `rfd` file dialog still reads the
-environment unlocked** — `pick_file()` blocks until the user chooses, so it
-cannot hold the lock without freezing every key press.
+the common half of the race is closed. **The `rfd` file and folder dialogs
+still read the environment unlocked** — `pick_file()` and `pick_folder()` block
+until the user chooses, so they cannot hold the lock without freezing every key
+press.
 
 The `unsafe` cannot be removed with this stack: cpal enumerates ALSA PCMs
 (`default`, `pulse`, `pipewire`, `hw:CARD=…`), not PipeWire sinks — none of the
@@ -117,14 +153,20 @@ measured 86 ms press-to-sound against 27 ms for the current open-per-press path.
 ### Property Inspector
 
 `pi/` is plain HTML and JavaScript with no build step. It talks to the plugin
-over `sendToPlugin` with a `command` field — `get_devices` and
-`open_file_picker` — and the plugin answers through
+over `sendToPlugin` with a `command` field — `get_devices`, `open_file_picker`
+and `open_folder_picker` — and the plugin answers through
 `send_to_property_inspector` with an `event` field. Both sides run blocking work
-(`pactl`, the native file dialog) inside `spawn_blocking`.
+(`pactl`, the native dialogs) inside `spawn_blocking`.
 
-`AudioSettings` fields are all `String`, including `volume`, because they come
-straight from HTML inputs; `volume` is parsed with a fallback rather than
-trusted.
+Both play actions use `pi/audio.html`. `audio.js` checks the action UUID: for
+Play Random Audio it relabels the path field, hides the Playback Mode row
+(with `style.display`, since `.sdpi-item`'s `display: flex` beats the `hidden`
+attribute) and makes Browse open the folder dialog. The folder dialog answers
+with the same `file_selected` event as the file dialog.
+
+`AudioSettings` and `RandomAudioSettings` fields are all `String`, including
+`volume`, because they come straight from HTML inputs; `volume` is parsed with a
+fallback rather than trusted.
 
 ## Known rough edges
 

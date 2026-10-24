@@ -4,12 +4,23 @@ let pluginUUID = null;
 let instanceContext = null;
 let globalActionInfo = null;
 
+// Play Random Audio shares this Property Inspector with Play Audio.
+const RANDOM_ACTION_UUID = "com.biviale.pwsounddeck.playrandom";
+
 // The standard OpenAction/StreamDeck plugin registration hook for Property Inspectors
 function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
     pluginUUID = inPropertyInspectorUUID;
     globalActionInfo = JSON.parse(inActionInfo);
     pluginAction = globalActionInfo.action;
     instanceContext = globalActionInfo.context;
+
+    if (pluginAction === RANDOM_ACTION_UUID) {
+        // A random key draws from a folder, and has no playback mode.
+        document.getElementById('pathLabel').textContent = 'Audio Folder';
+        document.getElementById('audioPath').placeholder = '/path/to/audio/folder';
+        // Not the `hidden` attribute: `.sdpi-item`'s `display: flex` would win over it.
+        document.getElementById('playbackModeRow').style.display = 'none';
+    }
 
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
@@ -126,7 +137,8 @@ document.getElementById('volume').addEventListener('input', function () {
 document.getElementById('volume').addEventListener('change', saveSettings);
 
 document.getElementById('browseBtn').addEventListener('click', function () {
-    sendToPlugin({ command: "open_file_picker" });
+    const command = pluginAction === RANDOM_ACTION_UUID ? "open_folder_picker" : "open_file_picker";
+    sendToPlugin({ command: command });
 });
 
 document.getElementById('refreshBtn').addEventListener('click', function () {

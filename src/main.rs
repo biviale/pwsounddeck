@@ -129,7 +129,7 @@ const RANDOM_PLAYBACK_MODE: &str = "restart";
 /// button instance already has audio playing.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum KeyDownDecision {
-    /// Stop this instance's players and start nothing new (loop toggle, second press).
+    /// Stop this instance's players and start nothing new (Loop or Play/Stop, second press).
     StopOnly,
     /// Do nothing at all (no file configured, nothing playing).
     DoNothing,
@@ -149,14 +149,14 @@ pub fn decide_key_down(
     has_audio_path: bool,
 ) -> KeyDownDecision {
     match playback_mode {
-        // Toggle: a second press while the loop is running stops it. This is
+        // Toggle: a second press while the sound is running stops it. This is
         // checked before the path, so clearing the path in the Property
         // Inspector never leaves a loop that its own button cannot stop.
-        "loop" if has_active_players => KeyDownDecision::StopOnly,
+        "loop" | "toggle" if has_active_players => KeyDownDecision::StopOnly,
         // Nothing playing and no file configured: there is nothing to start.
         _ if !has_audio_path => KeyDownDecision::DoNothing,
         "loop" => KeyDownDecision::Play { stop_existing: false, looping: true },
-        "stack" => KeyDownDecision::Play { stop_existing: false, looping: false },
+        "stack" | "toggle" => KeyDownDecision::Play { stop_existing: false, looping: false },
         // "restart", "hold" and any unknown mode replace the current playback.
         _ => KeyDownDecision::Play { stop_existing: true, looping: false },
     }
@@ -436,7 +436,7 @@ fn start_playback(
             return;
         }
         KeyDownDecision::StopOnly => {
-            // Loop mode, second press: toggle the running loop off.
+            // Loop or Play/Stop mode, second press: toggle the running sound off.
             stop_instance_players(&instance_id_str);
             return;
         }
@@ -802,6 +802,24 @@ mod tests {
     #[test]
     fn loop_mode_does_not_stop_on_key_up() {
         assert!(!decide_key_up("loop"));
+    }
+
+    #[test]
+    fn toggle_mode_plays_once_when_nothing_is_playing() {
+        assert_eq!(
+            decide_key_down("toggle", false, true),
+            KeyDownDecision::Play { stop_existing: false, looping: false }
+        );
+    }
+
+    #[test]
+    fn toggle_mode_stops_playback_on_second_press() {
+        assert_eq!(decide_key_down("toggle", true, true), KeyDownDecision::StopOnly);
+    }
+
+    #[test]
+    fn toggle_mode_does_not_stop_on_key_up() {
+        assert!(!decide_key_up("toggle"));
     }
 
     #[test]

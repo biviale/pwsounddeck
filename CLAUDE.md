@@ -83,8 +83,8 @@ mode there and in `pi/audio.html`'s `<select>`, not with a new branch inside
 `start_playback`.** The mode is a bare string shared between the Property Inspector
 and `AudioSettings.playback_mode`; an unknown string falls back to `restart`.
 
-Ordering inside `decide_key_down` is load-bearing: the Loop toggle is checked
-*before* the audio path, so that clearing the path in the Property Inspector
+Ordering inside `decide_key_down` is load-bearing: the Loop and Play/Stop toggle
+is checked *before* the audio path, so that clearing the path in the Property Inspector
 cannot strand a running loop with no way to stop it.
 
 Tests share the global `ACTIVE_PLAYERS` and `SHUFFLE_CYCLES` and run in

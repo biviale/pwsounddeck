@@ -92,6 +92,7 @@ takes no configuration.
 |---|---|---|
 | **Restart** | Stops what this key was playing, plays from the start | — |
 | **Stack** | Layers another copy over the ones already playing | — |
+| **Play/Stop** | Plays once, or stops it if it is still playing | — |
 | **Hold to Play** | Plays, like a walkie-talkie | Cuts off |
 | **Loop (Toggle)** | Starts the file looping, or stops it if it is already looping | — |
 

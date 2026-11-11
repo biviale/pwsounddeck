@@ -72,8 +72,9 @@ inserting `None`; the thread later hands over its player through
 
 The audio thread polls the map every 100 ms rather than using rodio's
 `sleep_until_end`, because the slot can disappear from under it (Stop Audio,
-Restart mode, a Loop toggle). A looping source **never reports `empty()`**, so
-for Loop mode that poll only ever ends by the slot being removed.
+Restart mode, a Loop or Play/Stop toggle). A looping source **never reports
+`empty()`**, so for Loop mode that poll only ever ends by the slot being
+removed.
 
 ### Playback modes are decided by pure functions
 
@@ -83,9 +84,9 @@ mode there and in `pi/audio.html`'s `<select>`, not with a new branch inside
 `start_playback`.** The mode is a bare string shared between the Property Inspector
 and `AudioSettings.playback_mode`; an unknown string falls back to `restart`.
 
-Ordering inside `decide_key_down` is load-bearing: the Loop and Play/Stop toggle
-is checked *before* the audio path, so that clearing the path in the Property Inspector
-cannot strand a running loop with no way to stop it.
+Ordering inside `decide_key_down` is load-bearing: the Loop and Play/Stop
+toggles are checked *before* the audio path, so that clearing the path in the
+Property Inspector cannot strand a playing sound with no way to stop it.
 
 Tests share the global `ACTIVE_PLAYERS` and `SHUFFLE_CYCLES` and run in
 parallel, so **each test must use its own `instance_id`** and clean up after

@@ -65,8 +65,8 @@ since device routing goes through PipeWire/PulseAudio.
 
 - **Browse** for an audio file — `.mp3`, `.wav`, `.ogg` or `.flac`
 - **Volume**, from 0% to 100%, independent for every key
-- **Output Device**, any sink `pactl` reports, or the system default. *Refresh
-  Devices* re-reads the list after plugging something in
+- **Output Device**, any sink `pactl` reports, or the system default.
+  *Refresh* re-reads the list after plugging something in
 - **Playback Mode**, below
 
 **Play Random Audio** plays a sound drawn at random from a folder. **Browse**

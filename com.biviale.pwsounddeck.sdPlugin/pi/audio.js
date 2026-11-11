@@ -95,11 +95,20 @@ function updateSettingsUI(settings) {
     }
     if (settings.playback_mode) {
         document.getElementById('playbackMode').value = settings.playback_mode;
+        updateModeHint();
     }
     if (settings.volume !== undefined) {
         document.getElementById('volume').value = settings.volume;
         document.getElementById('volumeValue').textContent = settings.volume + "%";
     }
+}
+
+// Shows the sentence describing the selected playback mode. Each <option> of
+// the list carries its own in `data-hint`, so a new mode needs nothing here.
+function updateModeHint() {
+    const select = document.getElementById('playbackMode');
+    const option = select.options[select.selectedIndex];
+    document.getElementById('playbackModeHint').textContent = (option && option.dataset.hint) || '';
 }
 
 function updateDeviceList(devices) {
@@ -130,7 +139,9 @@ function updateDeviceList(devices) {
 // Event listeners
 document.getElementById('audioPath').addEventListener('change', saveSettings);
 document.getElementById('audioDevice').addEventListener('change', saveSettings);
+document.getElementById('playbackMode').addEventListener('change', updateModeHint);
 document.getElementById('playbackMode').addEventListener('change', saveSettings);
+updateModeHint();
 document.getElementById('volume').addEventListener('input', function () {
     document.getElementById('volumeValue').textContent = this.value + "%";
 });

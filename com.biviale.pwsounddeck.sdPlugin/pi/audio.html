@@ -4,80 +4,138 @@
 <head>
     <meta charset="utf-8" />
     <title>Audio Soundboard Property Inspector</title>
-    <!-- Basic styling inspired by common property inspectors -->
     <style>
+        :root {
+            /* Background and field colours are the ones Property Inspectors
+               conventionally use, so this panel looks like its neighbours. */
+            --panel: #2d2d2d;
+            --field: #3d3d3d;
+            --field-border: #5c5c5c;
+            --button: #555;
+            --button-border: #777;
+            --text: #ececec;
+            --text-label: #c4c4c4;
+            --text-hint: #a6a6a6;
+            --control-height: 28px;
+            /* Width of the column holding Browse, Refresh and the volume value. */
+            --action-width: 76px;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            /* system-ui comes first so the panel uses the same font as OpenDeck. */
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 13px;
-            color: #d8d8d8;
-            background-color: #2d2d2d;
+            color: var(--text);
+            background-color: var(--panel);
             margin: 0;
-            padding: 10px;
+            padding: 12px;
         }
 
         .sdpi-item {
             display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            width: 100%;
+            align-items: flex-start;
+            margin-bottom: 10px;
         }
 
         .sdpi-item-label {
-            width: 90px;
-            min-width: 90px;
+            flex: none;
+            box-sizing: border-box;
+            width: 112px;
+            padding-right: 12px;
             text-align: right;
-            padding-right: 15px;
-            line-height: normal;
+            white-space: nowrap;
+            /* Centres the label on the first control of its row. */
+            line-height: var(--control-height);
+            color: var(--text-label);
         }
 
+        /* A field and, beside it, an optional action. Every row shares the
+           same two columns, so the fields all end on one vertical line. */
         .sdpi-item-value {
-            flex-grow: 1;
-            display: flex;
+            flex: 1;
+            min-width: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) var(--action-width);
+            column-gap: 8px;
             align-items: center;
-            width: 100%;
         }
 
-        .sdpi-item-value input[type="text"] {
+        .sdpi-item-value input[type="text"],
+        .sdpi-item-value select,
+        .sdpi-item-value button {
+            box-sizing: border-box;
+            height: var(--control-height);
+            /* Form controls do not inherit the font on their own. */
+            font: inherit;
+            color: var(--text);
+            border-radius: 4px;
+            padding: 0 8px;
+        }
+
+        .sdpi-item-value input[type="text"],
+        .sdpi-item-value select {
             width: 100%;
-            background-color: #3d3d3d;
-            border: 1px solid #555;
-            color: white;
-            padding: 4px;
-            border-radius: 3px;
-            flex-grow: 1;
-            margin-right: 5px;
+            background-color: var(--field);
+            border: 1px solid var(--field-border);
+        }
+
+        .sdpi-item-value input[type="text"]::placeholder {
+            color: #8f8f8f;
         }
 
         .sdpi-item-value select {
-            width: 100%;
-            background-color: #3d3d3d;
-            border: 1px solid #555;
-            color: white;
-            padding: 4px 24px 4px 8px;
-            border-radius: 3px;
+            padding-right: 28px;
             appearance: none;
             -webkit-appearance: none;
             background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
             background-repeat: no-repeat;
-            background-position: right 2px center;
+            background-position: right 4px center;
         }
 
         .sdpi-item-value select option {
-            background-color: #3d3d3d;
-            color: white;
+            background-color: var(--field);
+            color: var(--text);
+        }
+
+        .sdpi-item-value input[type="range"] {
+            width: 100%;
+            height: var(--control-height);
+            margin: 0;
+        }
+
+        #volumeValue {
+            /* Digits of equal width: the value does not jitter while dragging. */
+            font-variant-numeric: tabular-nums;
         }
 
         .sdpi-item-value button {
-            background-color: #555;
-            border: 1px solid #777;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 3px;
+            background-color: var(--button);
+            border: 1px solid var(--button-border);
             cursor: pointer;
         }
 
+        .sdpi-item-value button:hover {
+            background-color: #626262;
+        }
+
         .sdpi-item-value button:active {
-            background-color: #444;
+            background-color: #474747;
+        }
+
+        .sdpi-item-value :focus-visible {
+            /* The desktop's accent colour, the one the slider already uses. */
+            outline: 2px solid Highlight;
+            outline-offset: 1px;
+        }
+
+        /* A sentence under a field, spanning both columns and starting where
+           the text inside the field starts (its border plus its padding). */
+        .sdpi-hint {
+            grid-column: 1 / -1;
+            margin: 6px 0 0 9px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-hint);
         }
     </style>
 </head>
@@ -85,41 +143,41 @@
 <body>
     <div class="sdpi-wrapper">
         <div class="sdpi-item">
-            <div class="sdpi-item-label" id="pathLabel">Audio File</div>
+            <label class="sdpi-item-label" id="pathLabel" for="audioPath">Audio File</label>
             <div class="sdpi-item-value">
-                <input type="text" id="audioPath" placeholder="/path/to/audio/file.mp3" />
+                <input type="text" id="audioPath" placeholder="/path/to/audio/file.mp3" spellcheck="false" />
                 <button id="browseBtn">Browse</button>
             </div>
         </div>
         <div class="sdpi-item">
-            <div class="sdpi-item-label">Volume</div>
-            <div class="sdpi-item-value" style="display: flex; align-items: center;">
+            <label class="sdpi-item-label" for="volume">Volume</label>
+            <div class="sdpi-item-value">
                 <input type="range" id="volume" min="0" max="100" value="100">
                 <span id="volumeValue">100%</span>
             </div>
         </div>
         <div class="sdpi-item">
-            <div class="sdpi-item-label">Output Device</div>
+            <label class="sdpi-item-label" for="audioDevice">Output Device</label>
             <div class="sdpi-item-value">
                 <select id="audioDevice">
                     <option value="">Default OS Device</option>
                 </select>
+                <button id="refreshBtn" title="Read the list of output devices again">Refresh</button>
             </div>
         </div>
         <div class="sdpi-item" id="playbackModeRow">
-            <div class="sdpi-item-label">Playback Mode</div>
+            <label class="sdpi-item-label" for="playbackMode">Playback Mode</label>
             <div class="sdpi-item-value">
+                <!-- Each mode carries the sentence shown under the list. -->
                 <select id="playbackMode">
-                    <option value="restart">Restart</option>
-                    <option value="stack">Stack</option>
-                    <option value="play_stop">Play/Stop</option>
-                    <option value="hold">Hold to Play</option>
-                    <option value="loop">Loop (Toggle)</option>
+                    <option value="restart" data-hint="Each press starts the sound again from the beginning.">Restart</option>
+                    <option value="stack" data-hint="Each press adds another copy over the ones still playing, up to 10.">Stack</option>
+                    <option value="play_stop" data-hint="Press to play. Press again while it is playing to stop it.">Play/Stop</option>
+                    <option value="hold" data-hint="Plays while you hold the key, and stops when you release it.">Hold to Play</option>
+                    <option value="loop" data-hint="Press to start looping. Press again to stop.">Loop (Toggle)</option>
                 </select>
+                <p class="sdpi-hint" id="playbackModeHint"></p>
             </div>
-        </div>
-        <div class="sdpi-item" style="justify-content: center; margin-top: 20px;">
-            <button id="refreshBtn">Refresh Devices</button>
         </div>
     </div>
     <script src="audio.js"></script>

@@ -22,7 +22,21 @@
             --action-width: 76px;
         }
 
+        /* The page itself never scrolls: the body does, inside it. This is
+           the structure of the standard sdpi.css other plugins ship, and with
+           it the bottom of the panel no longer gets cut off in OpenDeck on
+           some desktops, when switching keys or leaving a list. */
+        html {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--panel);
+        }
+
         body {
+            box-sizing: border-box;
+            height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
             /* system-ui comes first so the panel uses the same font as OpenDeck. */
             font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 13px;

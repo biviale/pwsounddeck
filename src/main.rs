@@ -583,6 +583,16 @@ fn start_playback(
                     Ok(file) => {
                         match rodio::Decoder::try_from(file) {
                             Ok(source) => {
+                                debug!(
+                                    "Slot {}: {} ({} channel(s), {} Hz, {:?}), volume {}, looping: {}",
+                                    slot_id,
+                                    audio_path,
+                                    source.channels(),
+                                    source.sample_rate(),
+                                    source.total_duration(),
+                                    volume_factor,
+                                    looping
+                                );
                                 let player = rodio::Player::connect_new(stream.mixer());
                                 player.set_volume(volume_factor);
                                 if looping {
@@ -598,6 +608,7 @@ fn start_playback(
                                 }
 
                                 // Poll until the player is empty or has been stopped/removed
+                                let started = std::time::Instant::now();
                                 loop {
                                     match ACTIVE_PLAYERS.get(&slot_id) {
                                         Some(entry) => match &entry.value().1 {
@@ -613,6 +624,7 @@ fn start_playback(
                                 }
                                 // Clean up after playback completes
                                 ACTIVE_PLAYERS.remove(&slot_id);
+                                debug!("Slot {} released {:?} after it started.", slot_id, started.elapsed());
                                 // stream (MixerDeviceSink) is dropped here, closing the PA connection
                             },
                             Err(e) => {
@@ -823,6 +835,17 @@ impl Action for StopAudioAction {
     }
 }
 
+/// The environment variable that sets the log level. OpenDeck starts the
+/// plugin, so it has to be set where OpenDeck itself is started.
+const LOG_LEVEL_VARIABLE: &str = "PWSOUNDDECK_LOG";
+
+/// The level to log at: `info`, unless `requested` names another one.
+fn log_level(requested: Option<&str>) -> log::LevelFilter {
+    requested
+        .and_then(|level| level.trim().parse().ok())
+        .unwrap_or(log::LevelFilter::Info)
+}
+
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
     {
@@ -832,7 +855,7 @@ async fn main() -> OpenActionResult<()> {
         // TermLogger would silently fail because stdout/stderr are not TTYs
         // when the plugin is spawned as a child process.
         WriteLogger::init(
-            LevelFilter::Info,
+            log_level(std::env::var(LOG_LEVEL_VARIABLE).ok().as_deref()),
             Config::default(),
             std::io::stderr(),
         )
@@ -1005,6 +1028,21 @@ mod tests {
             "stopping one button must not touch another button's audio"
         );
         stop_instance_players(b);
+    }
+
+    // ------- Logging -------
+
+    #[test]
+    fn the_log_level_is_info_unless_another_one_is_asked_for() {
+        assert_eq!(log_level(None), log::LevelFilter::Info);
+        assert_eq!(log_level(Some("debug")), log::LevelFilter::Debug);
+        assert_eq!(log_level(Some("TRACE")), log::LevelFilter::Trace);
+    }
+
+    #[test]
+    fn an_unknown_log_level_falls_back_to_info() {
+        assert_eq!(log_level(Some("verbose")), log::LevelFilter::Info);
+        assert_eq!(log_level(Some("")), log::LevelFilter::Info);
     }
 
     // ------- Looping -------

@@ -129,6 +129,13 @@ The plugin's log is at:
 ~/.local/share/opendeck/logs/plugins/com.biviale.pwsounddeck.sdPlugin.log
 ```
 
+It records key presses and errors. To also see the file each press plays, its
+format and when its sound ends, start OpenDeck with `PWSOUNDDECK_LOG=debug`:
+
+```bash
+PWSOUNDDECK_LOG=debug opendeck
+```
+
 - **The actions do not appear** — OpenDeck only reads plugin manifests at
   startup. Restart it.
 - **The device list is empty** — check that `pactl list sinks` works from a

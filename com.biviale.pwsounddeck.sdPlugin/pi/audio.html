@@ -16,6 +16,7 @@
             --text: #ececec;
             --text-label: #c4c4c4;
             --text-hint: #a6a6a6;
+            --confirm: #5cc98a;
             --control-height: 28px;
             /* Width of the column holding Browse, Refresh and the volume value. */
             --action-width: 76px;
@@ -120,6 +121,12 @@
 
         .sdpi-item-value button:active {
             background-color: #474747;
+        }
+
+        /* Set for a moment on Refresh once the device list has been read again. */
+        .sdpi-item-value button.sdpi-confirmed {
+            border-color: var(--confirm);
+            box-shadow: 0 0 0 1px var(--confirm);
         }
 
         .sdpi-item-value :focus-visible {

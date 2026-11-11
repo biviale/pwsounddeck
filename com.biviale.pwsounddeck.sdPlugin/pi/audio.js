@@ -48,7 +48,7 @@ function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegist
         if (event === "sendToPropertyInspector") {
             const payload = jsonObj.payload;
             if (payload.event === "device_list") {
-                updateDeviceList(payload.devices);
+                onDeviceList(payload.devices);
             } else if (payload.event === "file_selected") {
                 document.getElementById('audioPath').value = payload.path;
                 saveSettings();
@@ -59,15 +59,18 @@ function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegist
     };
 }
 
+// Returns whether the message could be sent.
 function sendToPlugin(payload) {
-    if (websocket) {
-        websocket.send(JSON.stringify({
-            "event": "sendToPlugin",
-            "action": pluginAction,
-            "context": instanceContext,
-            "payload": payload
-        }));
+    if (!websocket) {
+        return false;
     }
+    websocket.send(JSON.stringify({
+        "event": "sendToPlugin",
+        "action": pluginAction,
+        "context": instanceContext,
+        "payload": payload
+    }));
+    return true;
 }
 
 function saveSettings() {
@@ -109,6 +112,30 @@ function updateModeHint() {
     const select = document.getElementById('playbackMode');
     const option = select.options[select.selectedIndex];
     document.getElementById('playbackModeHint').textContent = (option && option.dataset.hint) || '';
+}
+
+// Set by a click on Refresh. The list also arrives on its own when the panel
+// opens, and that one is not a refresh the user asked for.
+let refreshRequested = false;
+let refreshConfirmationTimer = null;
+
+// Called with the output devices the plugin found.
+function onDeviceList(devices) {
+    updateDeviceList(devices);
+    if (refreshRequested) {
+        refreshRequested = false;
+        confirmRefresh();
+    }
+}
+
+// Rings the Refresh button in green for a moment: the list was read again.
+function confirmRefresh() {
+    const button = document.getElementById('refreshBtn');
+    button.classList.add('sdpi-confirmed');
+    clearTimeout(refreshConfirmationTimer);
+    refreshConfirmationTimer = setTimeout(function () {
+        button.classList.remove('sdpi-confirmed');
+    }, 1500);
 }
 
 function updateDeviceList(devices) {
@@ -153,5 +180,6 @@ document.getElementById('browseBtn').addEventListener('click', function () {
 });
 
 document.getElementById('refreshBtn').addEventListener('click', function () {
-    sendToPlugin({ command: "get_devices" });
+    // Only a request that was really sent can be confirmed.
+    refreshRequested = sendToPlugin({ command: "get_devices" });
 });

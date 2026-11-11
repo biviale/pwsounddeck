@@ -73,15 +73,22 @@ inserting `None`; the thread later hands over its player through
 The audio thread polls the map every 100 ms rather than using rodio's
 `sleep_until_end`, because the slot can disappear from under it (Stop Audio,
 Restart mode, a Loop or Play/Stop toggle). A looping source **never reports
-`empty()`**, so for Loop mode that poll only ever ends by the slot being
-removed.
+`empty()`** unless the sound has no sample at all, so for Loop mode that poll
+otherwise only ends by the slot being removed.
+
+**Loop through `looped()`, never `repeat_infinite()` directly.** rodio's
+repeat buffers one span at a time and takes an empty span for the end of the
+sound, and its decoder opens on an empty span for some MP3s (encoder delay):
+such a file played in every mode but Loop, where it was silent. `looped()`
+holds the first sample back so the first span is never empty.
 
 ### Playback modes are decided by pure functions
 
 `decide_key_down` and `decide_key_up` hold all the mode logic and touch no
 audio, which is what makes the modes testable without a sound card. **Add a new
 mode there and in `pi/audio.html`'s `<select>`, not with a new branch inside
-`start_playback`.** The mode is a bare string shared between the Property Inspector
+`start_playback`.** Its `<option>` carries, in `data-hint`, the sentence shown
+under the list when it is selected. The mode is a bare string shared between the Property Inspector
 and `AudioSettings.playback_mode`; an unknown string falls back to `restart`.
 
 Ordering inside `decide_key_down` is load-bearing: the Loop and Play/Stop
@@ -164,6 +171,16 @@ Play Random Audio it relabels the path field, hides the Playback Mode row
 (with `style.display`, since `.sdpi-item`'s `display: flex` beats the `hidden`
 attribute) and makes Browse open the folder dialog. The folder dialog answers
 with the same `file_selected` event as the file dialog.
+
+**The page must not scroll; the body does.** `html` is full height with
+`overflow: hidden`, and `body` scrolls inside it, as in the standard
+`sdpi.css` other plugins ship. With the page itself scrolling, OpenDeck on KDE
+Plasma (Wayland, NVIDIA, a blur effect) sometimes drew only the top 150 px of
+the panel after a key switch or after leaving a list. It never reproduced
+outside that desktop, so keep this structure even if it looks unnecessary.
+
+Refresh is ringed in green once the plugin answers a click with the device
+list; the list sent when the panel opens is not a refresh and is not confirmed.
 
 `AudioSettings` and `RandomAudioSettings` fields are all `String`, including
 `volume`, because they come straight from HTML inputs; `volume` is parsed with a

@@ -129,7 +129,7 @@ const RANDOM_PLAYBACK_MODE: &str = "restart";
 /// button instance already has audio playing.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum KeyDownDecision {
-    /// Stop this instance's players and start nothing new (loop toggle, second press).
+    /// Stop this instance's players and start nothing new (Loop or Play/Stop, second press).
     StopOnly,
     /// Do nothing at all (no file configured, nothing playing).
     DoNothing,
@@ -149,15 +149,17 @@ pub fn decide_key_down(
     has_audio_path: bool,
 ) -> KeyDownDecision {
     match playback_mode {
-        // Toggle: a second press while the loop is running stops it. This is
-        // checked before the path, so clearing the path in the Property
-        // Inspector never leaves a loop that its own button cannot stop.
-        "loop" if has_active_players => KeyDownDecision::StopOnly,
+        // Loop and Play/Stop are toggles: a second press while the sound is
+        // running stops it. This is checked before the path, so clearing the
+        // path in the Property Inspector never leaves a sound that its own
+        // button cannot stop.
+        "loop" | "play_stop" if has_active_players => KeyDownDecision::StopOnly,
         // Nothing playing and no file configured: there is nothing to start.
         _ if !has_audio_path => KeyDownDecision::DoNothing,
         "loop" => KeyDownDecision::Play { stop_existing: false, looping: true },
         "stack" => KeyDownDecision::Play { stop_existing: false, looping: false },
         // "restart", "hold" and any unknown mode replace the current playback.
+        // So does "play_stop", which only gets here with nothing playing.
         _ => KeyDownDecision::Play { stop_existing: true, looping: false },
     }
 }
@@ -436,7 +438,7 @@ fn start_playback(
             return;
         }
         KeyDownDecision::StopOnly => {
-            // Loop mode, second press: toggle the running loop off.
+            // Loop or Play/Stop mode, second press: toggle the running sound off.
             stop_instance_players(&instance_id_str);
             return;
         }
@@ -470,7 +472,8 @@ fn start_playback(
     }
 
     // Reserved before spawning, so a second press during start-up sees this
-    // instance as busy instead of starting a second (never-ending) loop.
+    // instance as busy: without it a Loop key would start a second, unstoppable
+    // loop, and a Play/Stop key a second copy of its sound.
     let slot_id = reserve_player_slot(&instance_id_str);
 
     tokio::task::spawn_blocking(move || {
@@ -805,6 +808,24 @@ mod tests {
     }
 
     #[test]
+    fn play_stop_mode_plays_once_when_nothing_is_playing() {
+        assert_eq!(
+            decide_key_down("play_stop", false, true),
+            KeyDownDecision::Play { stop_existing: true, looping: false }
+        );
+    }
+
+    #[test]
+    fn play_stop_mode_stops_playback_on_second_press() {
+        assert_eq!(decide_key_down("play_stop", true, true), KeyDownDecision::StopOnly);
+    }
+
+    #[test]
+    fn play_stop_mode_does_not_stop_on_key_up() {
+        assert!(!decide_key_up("play_stop"));
+    }
+
+    #[test]
     fn restart_mode_replaces_the_current_playback() {
         assert_eq!(
             decide_key_down("restart", true, true),
@@ -838,9 +859,21 @@ mod tests {
     }
 
     #[test]
+    fn a_play_stop_sound_can_be_stopped_even_after_the_path_was_cleared() {
+        assert_eq!(
+            decide_key_down("play_stop", true, false),
+            KeyDownDecision::StopOnly
+        );
+    }
+
+    #[test]
     fn without_a_path_and_without_playback_nothing_happens() {
         assert_eq!(
             decide_key_down("loop", false, false),
+            KeyDownDecision::DoNothing
+        );
+        assert_eq!(
+            decide_key_down("play_stop", false, false),
             KeyDownDecision::DoNothing
         );
         assert_eq!(

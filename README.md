@@ -7,7 +7,7 @@ OpenAction server can load it. It is developed and tested against
 [OpenDeck](https://github.com/nekename/OpenDeck), the reference server, which is
 what the instructions below assume.
 
-Per-key volume, four playback modes, a key that draws a random sound from a
+Per-key volume, five playback modes, a key that draws a random sound from a
 folder, and routing straight to a chosen PipeWire/PulseAudio sink — so a sound
 effect can go to your headset, or to the virtual sink your friends hear, without
 touching the system default.
@@ -92,6 +92,7 @@ takes no configuration.
 |---|---|---|
 | **Restart** | Stops what this key was playing, plays from the start | — |
 | **Stack** | Layers another copy over the ones already playing | — |
+| **Play/Stop** | Plays once, or stops it if it is still playing | — |
 | **Hold to Play** | Plays, like a walkie-talkie | Cuts off |
 | **Loop (Toggle)** | Starts the file looping, or stops it if it is already looping | — |
 

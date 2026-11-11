@@ -224,6 +224,66 @@ fn stop_instance_players(instance_id: &str) {
     }
 }
 
+// ------- Looping -------
+
+/// Repeats `source` until its player is stopped.
+///
+/// rodio's `repeat_infinite` buffers its source one span at a time and takes
+/// an empty span for the end of the sound. Its decoder can open on one: the
+/// first packet of an MP3 with encoder delay decodes to nothing. Such a sound
+/// played in every mode but Loop, where the buffer saw no sound at all.
+/// Holding the first sample back makes the span the buffer starts on never
+/// empty, unless the sound really has no sample.
+fn looped<S>(source: S) -> impl Source + Send + 'static
+where
+    S: Source + Send + 'static,
+{
+    FirstSampleHeld::new(source).repeat_infinite()
+}
+
+/// A source whose first sample has already been pulled out of it.
+struct FirstSampleHeld<S: Source> {
+    first: Option<rodio::Sample>,
+    source: S,
+}
+
+impl<S: Source> FirstSampleHeld<S> {
+    fn new(mut source: S) -> Self {
+        let first = source.next();
+        Self { first, source }
+    }
+}
+
+impl<S: Source> Iterator for FirstSampleHeld<S> {
+    type Item = rodio::Sample;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.first.take().or_else(|| self.source.next())
+    }
+}
+
+impl<S: Source> Source for FirstSampleHeld<S> {
+    fn current_span_len(&self) -> Option<usize> {
+        match (self.first, self.source.current_span_len()) {
+            // The held sample comes before whatever the source has left.
+            (Some(_), Some(len)) => Some(len + 1),
+            (_, len) => len,
+        }
+    }
+
+    fn channels(&self) -> rodio::ChannelCount {
+        self.source.channels()
+    }
+
+    fn sample_rate(&self) -> rodio::SampleRate {
+        self.source.sample_rate()
+    }
+
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        self.source.total_duration()
+    }
+}
+
 // ------- Random draws -------
 
 /// Extensions the file picker offers and Play Random Audio draws from.
@@ -526,7 +586,7 @@ fn start_playback(
                                 let player = rodio::Player::connect_new(stream.mixer());
                                 player.set_volume(volume_factor);
                                 if looping {
-                                    player.append(source.repeat_infinite());
+                                    player.append(looped(source));
                                 } else {
                                     player.append(source);
                                 }
@@ -541,8 +601,9 @@ fn start_playback(
                                 loop {
                                     match ACTIVE_PLAYERS.get(&slot_id) {
                                         Some(entry) => match &entry.value().1 {
-                                            // A looping source never reports empty, so this
-                                            // only ends when the slot is removed.
+                                            // A looping source never reports empty unless the
+                                            // sound has no sample, so this otherwise only
+                                            // ends when the slot is removed.
                                             Some(player) if player.empty() => break,
                                             _ => {}
                                         },
@@ -944,6 +1005,80 @@ mod tests {
             "stopping one button must not touch another button's audio"
         );
         stop_instance_players(b);
+    }
+
+    // ------- Looping -------
+
+    /// A sound handed out one span at a time, the way a decoder hands out its
+    /// packets. Like rodio's decoder, it reports the length of the span it is
+    /// in and only moves on to the next one when asked for a sample.
+    struct Spans {
+        spans: Vec<Vec<f32>>,
+        span: usize,
+        offset: usize,
+    }
+
+    fn spans(spans: &[&[f32]]) -> Spans {
+        Spans { spans: spans.iter().map(|span| span.to_vec()).collect(), span: 0, offset: 0 }
+    }
+
+    impl Iterator for Spans {
+        type Item = f32;
+
+        fn next(&mut self) -> Option<f32> {
+            while self.span < self.spans.len() && self.offset >= self.spans[self.span].len() {
+                self.span += 1;
+                self.offset = 0;
+            }
+            let sample = *self.spans.get(self.span)?.get(self.offset)?;
+            self.offset += 1;
+            Some(sample)
+        }
+    }
+
+    impl Source for Spans {
+        fn current_span_len(&self) -> Option<usize> {
+            Some(self.spans.get(self.span).map_or(0, Vec::len))
+        }
+
+        fn channels(&self) -> rodio::ChannelCount {
+            rodio::ChannelCount::new(1).unwrap()
+        }
+
+        fn sample_rate(&self) -> rodio::SampleRate {
+            rodio::SampleRate::new(44_100).unwrap()
+        }
+
+        fn total_duration(&self) -> Option<std::time::Duration> {
+            None
+        }
+    }
+
+    #[test]
+    fn a_loop_plays_a_sound_whose_first_span_is_empty() {
+        // What rodio's decoder gives for an MP3 with encoder delay: nothing in
+        // the first packet, the sound in the ones after it.
+        let sound = spans(&[&[], &[0.1, 0.2], &[0.3]]);
+
+        let played: Vec<f32> = looped(sound).take(7).collect();
+
+        assert_eq!(played, [0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1]);
+    }
+
+    #[test]
+    fn a_loop_repeats_a_sound_from_its_first_sample_to_its_last() {
+        let sound = spans(&[&[0.1, 0.2], &[0.3]]);
+
+        let played: Vec<f32> = looped(sound).take(7).collect();
+
+        assert_eq!(played, [0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1]);
+    }
+
+    #[test]
+    fn a_loop_of_a_sound_with_no_samples_ends_instead_of_spinning() {
+        let played: Vec<f32> = looped(spans(&[&[]])).take(5).collect();
+
+        assert!(played.is_empty());
     }
 
     // ------- Random draws -------
